@@ -1,0 +1,397 @@
+//@version=6
+indicator("Tilson T3 By BinoX", overlay=true, max_lines_count=500, max_bars_back=500)
+
+// ═══════════════════════════════════════════════
+//  PRINCIPAL
+// ═══════════════════════════════════════════════
+src_input   = input.source(close, "Fonte de Preco", group="Principal")
+
+// ═══════════════════════════════════════════════
+//  TILSON 1
+// ═══════════════════════════════════════════════
+showT1       = input.bool(true, "Mostrar Tilson 1", group="Tilson 1", inline="show")
+showT2       = input.bool(true, "Mostrar Tilson 2", group="Tilson 1", inline="show")
+showT3       = input.bool(true, "Mostrar Tilson 3", group="Tilson 1", inline="show")
+
+lengthT1     = input.int(7,  "Period",  minval=1, maxval=200, group="Tilson 1")
+smoothT1     = input.int(1,  "Smooth",  minval=0, maxval=50,  group="Tilson 1")
+showFiboT1   = input.bool(false, "Mostrar Fibo", group="Tilson 1")
+lengthFiboT1 = input.int(5, "T3 Length fibo", minval=1, maxval=200, group="Tilson 1", active=showFiboT1)
+vfFiboT1     = input.float(0.618, "Volume Factor fibo", minval=0.01, maxval=2.0, step=0.001, group="Tilson 1", active=showFiboT1)
+useAdaptive1 = input.bool(false, "Adaptive ER", tooltip="Adapta o vFactor pelo Efficiency Ratio: mais responsivo em tendência e mais suave no ruído.", group="Tilson 1")
+factorFix1   = input.float(0.7, "vFactor (fixo)",        minval=0.0, maxval=2.0, step=0.05, active=not useAdaptive1, group="Tilson 1")
+factorAdp1   = input.float(1.0, "ER Sensitivity",        minval=0.1, maxval=5.0, step=0.1, active=useAdaptive1, group="Tilson 1", tooltip="1 = linear. Acima de 1 filtra mais a lateralização; abaixo de 1 responde mais cedo.")
+vScale1      = input.float(1.0, "Escala Vertical",   minval=-100.0, maxval=100.0, step=0.05, group="Tilson 1")
+hScale1      = input.float(1.0, "Escala Horizontal", minval=0.01, maxval=100.0, step=0.05, group="Tilson 1")
+mainWidth1   = input.int(2, "Line", minval=1, group="Tilson 1", inline="t1Width")
+shadowWidth1 = input.int(10, "Shadow", minval=1, group="Tilson 1", inline="t1Width")
+t1LineUp     = input.color(#00FF00, "", group="Tilson 1", inline="t1Line")
+t1LineDn     = input.color(#FF0000, "", group="Tilson 1", inline="t1Line")
+t1ShadowUp   = input.color(color.new(#00FF00, 70), "", group="Tilson 1", inline="t1Line")
+t1ShadowDn   = input.color(color.new(#FF0000, 70), "", group="Tilson 1", inline="t1Line")
+t1FiboUp     = input.color(color.blue,   "Fibo", group="Tilson 1", inline="t1Fibo", active=showFiboT1)
+t1FiboDn     = input.color(color.purple, "",     group="Tilson 1", inline="t1Fibo", active=showFiboT1)
+t1FiboNt     = input.color(color.yellow, "",     group="Tilson 1", inline="t1Fibo", active=showFiboT1)
+hOffset1     = input.int(0, "Offset Horizontal (barras)", minval=-100, maxval=100, step=5, group="Tilson 1")
+vOffset1     = input.int(0, "Offset Vertical Visual", minval=-100, maxval=100, step=1, group="Tilson 1")
+vStrength1   = input.float(0.05, "Forca Vertical ATR", minval=0.001, maxval=1.0, step=0.01, group="Tilson 1")
+showSigT1    = input.bool(false, "Mostrar Sinais (mudança de cor)", group="Tilson 1")
+
+// ═══════════════════════════════════════════════
+//  TILSON 2
+// ═══════════════════════════════════════════════
+
+lengthT2     = input.int(14, "Period",  minval=1, maxval=200, group="Tilson 2")
+smoothT2     = input.int(1,  "Smooth",  minval=0, maxval=50,  group="Tilson 2")
+showFiboT2   = input.bool(false, "Mostrar Fibo", group="Tilson 2")
+lengthFiboT2 = input.int(5, "T3 Length fibo", minval=1, maxval=200, group="Tilson 2", active=showFiboT2)
+vfFiboT2     = input.float(0.618, "Volume Factor fibo", minval=0.01, maxval=2.0, step=0.001, group="Tilson 2", active=showFiboT2)
+useAdaptive2 = input.bool(false, "Adaptive ER", tooltip="Adapta o vFactor pelo Efficiency Ratio: mais responsivo em tendência e mais suave no ruído.", group="Tilson 2")
+factorFix2   = input.float(0.7, "vFactor (fixo)",        minval=0.0, maxval=2.0, step=0.05, active=not useAdaptive2, group="Tilson 2")
+factorAdp2   = input.float(1.0, "ER Sensitivity",        minval=0.1, maxval=5.0, step=0.1, active=useAdaptive2, group="Tilson 2", tooltip="1 = linear. Acima de 1 filtra mais a lateralização; abaixo de 1 responde mais cedo.")
+vScale2      = input.float(1.0, "Escala Vertical",   minval=-100.0, maxval=100.0, step=0.05, group="Tilson 2")
+hScale2      = input.float(1.0, "Escala Horizontal", minval=0.01, maxval=100.0, step=0.05, group="Tilson 2")
+mainWidth2   = input.int(2, "Line", minval=1, group="Tilson 2", inline="t2Width")
+shadowWidth2 = input.int(10, "Shadow", minval=1, group="Tilson 2", inline="t2Width")
+t2LineUp     = input.color(#00AAFF, "", group="Tilson 2", inline="t2Line")
+t2LineDn     = input.color(#FF6600, "", group="Tilson 2", inline="t2Line")
+t2ShadowUp   = input.color(color.new(#00AAFF, 70), "", group="Tilson 2", inline="t2Line")
+t2ShadowDn   = input.color(color.new(#FF6600, 70), "", group="Tilson 2", inline="t2Line")
+t2FiboUp     = input.color(color.blue,   "Fibo", group="Tilson 2", inline="t2Fibo", active=showFiboT2)
+t2FiboDn     = input.color(color.purple, "",     group="Tilson 2", inline="t2Fibo", active=showFiboT2)
+t2FiboNt     = input.color(color.yellow, "",     group="Tilson 2", inline="t2Fibo", active=showFiboT2)
+hOffset2     = input.int(0, "Offset Horizontal (barras)", minval=-100, maxval=100, step=5, group="Tilson 2")
+vOffset2     = input.int(0, "Offset Vertical Visual", minval=-100, maxval=100, step=1, group="Tilson 2")
+vStrength2   = input.float(0.05, "Forca Vertical ATR", minval=0.001, maxval=1.0, step=0.01, group="Tilson 2")
+showSigT2    = input.bool(false, "Mostrar Sinais (mudança de cor)", group="Tilson 2")
+
+// ═══════════════════════════════════════════════
+//  TILSON 3
+// ═══════════════════════════════════════════════
+
+lengthT3     = input.int(28, "Period",  minval=1, maxval=200, group="Tilson 3")
+smoothT3     = input.int(1,  "Smooth",  minval=0, maxval=50,  group="Tilson 3")
+showFiboT3   = input.bool(false, "Mostrar Fibo", group="Tilson 3")
+lengthFiboT3 = input.int(5, "T3 Length fibo", minval=1, maxval=200, group="Tilson 3", active=showFiboT3)
+vfFiboT3     = input.float(0.618, "Volume Factor fibo", minval=0.01, maxval=2.0, step=0.001, group="Tilson 3", active=showFiboT3)
+useAdaptive3 = input.bool(false, "Adaptive ER", tooltip="Adapta o vFactor pelo Efficiency Ratio: mais responsivo em tendência e mais suave no ruído.", group="Tilson 3")
+factorFix3   = input.float(0.7, "vFactor (fixo)",        minval=0.0, maxval=2.0, step=0.05, active=not useAdaptive3, group="Tilson 3")
+factorAdp3   = input.float(1.0, "ER Sensitivity",        minval=0.1, maxval=5.0, step=0.1, active=useAdaptive3, group="Tilson 3", tooltip="1 = linear. Acima de 1 filtra mais a lateralização; abaixo de 1 responde mais cedo.")
+vScale3      = input.float(1.0, "Escala Vertical",   minval=-100.0, maxval=100.0, step=0.05, group="Tilson 3")
+hScale3      = input.float(1.0, "Escala Horizontal", minval=0.01, maxval=100.0, step=0.05, group="Tilson 3")
+mainWidth3   = input.int(2, "Line", minval=1, group="Tilson 3", inline="t3Width")
+shadowWidth3 = input.int(10, "Shadow", minval=1, group="Tilson 3", inline="t3Width")
+t3LineUp     = input.color(#FFFF00, "", group="Tilson 3", inline="t3Line")
+t3LineDn     = input.color(#FF00FF, "", group="Tilson 3", inline="t3Line")
+t3ShadowUp   = input.color(color.new(#FFFF00, 70), "", group="Tilson 3", inline="t3Line")
+t3ShadowDn   = input.color(color.new(#FF00FF, 70), "", group="Tilson 3", inline="t3Line")
+t3FiboUp     = input.color(color.blue,   "Fibo", group="Tilson 3", inline="t3Fibo", active=showFiboT3)
+t3FiboDn     = input.color(color.purple, "",     group="Tilson 3", inline="t3Fibo", active=showFiboT3)
+t3FiboNt     = input.color(color.yellow, "",     group="Tilson 3", inline="t3Fibo", active=showFiboT3)
+hOffset3     = input.int(0, "Offset Horizontal (barras)", minval=-100, maxval=100, step=5, group="Tilson 3")
+vOffset3     = input.int(0, "Offset Vertical Visual", minval=-100, maxval=100, step=1, group="Tilson 3")
+vStrength3   = input.float(0.05, "Forca Vertical ATR", minval=0.001, maxval=1.0, step=0.01, group="Tilson 3")
+showSigT3    = input.bool(false, "Mostrar Sinais (mudança de cor)", group="Tilson 3")
+
+// ═══════════════════════════════════════════════
+//  TIMEFRAME
+// ═══════════════════════════════════════════════
+useCurrentTF = input.bool(true, "Usar Resolucao do Grafico", group="Timeframe")
+customTF     = input.timeframe("D", "Timeframe Customizado", active=not useCurrentTF, group="Timeframe")
+
+// ═══════════════════════════════════════════════
+//  ADAPTATIVO ER (Kaufman Efficiency Ratio)
+// ═══════════════════════════════════════════════
+erLength = input.int(10, "ER Period", minval=2, maxval=200, group="Adaptive ER")
+erVMin   = input.float(0.20, "vFactor minimo", minval=0.0, maxval=1.0, step=0.05, group="Adaptive ER")
+erVMax   = input.float(0.90, "vFactor maximo", minval=0.0, maxval=1.0, step=0.05, group="Adaptive ER")
+
+// ═══════════════════════════════════════════════
+//  INTELIGENCIA MULTI-TIMEFRAME
+// ═══════════════════════════════════════════════
+useMTFIntel      = input.bool(false, "Ativar consenso MTF", group="Inteligencia MTF")
+mtfTF1           = input.timeframe("15", "Timeframe 1", group="Inteligencia MTF", active=useMTFIntel)
+mtfTF2           = input.timeframe("60", "Timeframe 2", group="Inteligencia MTF", active=useMTFIntel)
+mtfTF3           = input.timeframe("240", "Timeframe 3", group="Inteligencia MTF", active=useMTFIntel)
+mtfTF4           = input.timeframe("1D", "Timeframe 4", group="Inteligencia MTF", active=useMTFIntel)
+mtfTF5           = input.timeframe("1W", "Timeframe 5", group="Inteligencia MTF", active=useMTFIntel)
+mtfBlend         = input.float(0.35, "Peso MTF na adaptacao", minval=0.0, maxval=1.0, step=0.05, group="Inteligencia MTF", active=useMTFIntel, tooltip="0 usa somente o ER local; 1 usa somente a força do consenso MTF.")
+mtfFilterSignals = input.bool(true, "Filtrar sinais pelo consenso", group="Inteligencia MTF", active=useMTFIntel)
+mtfThreshold     = input.float(0.60, "Consenso minimo", minval=0.0, maxval=1.0, step=0.05, group="Inteligencia MTF", active=useMTFIntel and mtfFilterSignals)
+showMTFTable     = input.bool(true, "Mostrar painel MTF", group="Inteligencia MTF", active=useMTFIntel)
+
+efficiencyRatio(source, len) =>
+    direction = math.abs(source - source[len])
+    noise = ta.sma(math.abs(source - source[1]), len) * len
+    noise > 0 ? math.min(1.0, direction / noise) : 0.0
+
+// Direção de uma T3 clássica. Usada apenas para votar no consenso MTF.
+t3Direction(source, len) =>
+    v = 0.7
+    e1 = ta.ema(source, len)
+    e2 = ta.ema(e1, len)
+    e3 = ta.ema(e2, len)
+    e4 = ta.ema(e3, len)
+    e5 = ta.ema(e4, len)
+    e6 = ta.ema(e5, len)
+    c1 = -v * v * v
+    c2 = 3 * v * v + 3 * v * v * v
+    c3 = -6 * v * v - 3 * v - 3 * v * v * v
+    c4 = 1 + 3 * v + v * v * v + 3 * v * v
+    value = c1 * e6 + c2 * e5 + c3 * e4 + c4 * e3
+    value > value[1] ? 1.0 : value < value[1] ? -1.0 : 0.0
+
+// Timeframes iguais ou abaixo da resolução-base são ignorados, pois o timeframe
+// base já participa da votação. Para os inferiores seria necessário
+// request.security_lower_tf(), cujo resultado é um array de intrabarras.
+mtfDirection(tf, baseSeconds) =>
+    timeframe.in_seconds(tf) > baseSeconds ? request.security(syminfo.tickerid, tf, t3Direction(src_input, lengthT2)[1], lookahead=barmerge.lookahead_on) : na
+
+// ═══════════════════════════════════════════════
+//  FONTE DE DADOS
+// ═══════════════════════════════════════════════
+res = useCurrentTF ? timeframe.period : customTF
+[src, srcHigh, srcLow, srcClose, erValue, atrVal] = request.security(syminfo.tickerid, res, [src_input, high, low, close, efficiencyRatio(src_input, erLength), ta.atr(14)], lookahead=barmerge.lookahead_off)
+srcHLCC4 = (srcHigh + srcLow + 2 * srcClose) / 4
+
+// Cada voto usa a última barra confirmada do seu próprio timeframe.
+baseSeconds = timeframe.in_seconds(res)
+mtfBase = useMTFIntel ? request.security(syminfo.tickerid, res, t3Direction(src_input, lengthT2)[1], lookahead=barmerge.lookahead_on) : na
+mtfState1 = useMTFIntel ? mtfDirection(mtfTF1, baseSeconds) : na
+mtfState2 = useMTFIntel ? mtfDirection(mtfTF2, baseSeconds) : na
+mtfState3 = useMTFIntel ? mtfDirection(mtfTF3, baseSeconds) : na
+mtfState4 = useMTFIntel ? mtfDirection(mtfTF4, baseSeconds) : na
+mtfState5 = useMTFIntel ? mtfDirection(mtfTF5, baseSeconds) : na
+
+mtfCount = (not na(mtfBase) ? 1.0 : 0.0) + (not na(mtfState1) ? 1.0 : 0.0) + (not na(mtfState2) ? 1.0 : 0.0) + (not na(mtfState3) ? 1.0 : 0.0) + (not na(mtfState4) ? 1.0 : 0.0) + (not na(mtfState5) ? 1.0 : 0.0)
+mtfSum = nz(mtfBase) + nz(mtfState1) + nz(mtfState2) + nz(mtfState3) + nz(mtfState4) + nz(mtfState5)
+mtfReady = mtfCount >= 2
+mtfScore = mtfReady ? mtfSum / mtfCount : 0.0
+mtfStrength = math.abs(mtfScore)
+adaptiveDriver = useMTFIntel and mtfReady ? erValue * (1.0 - mtfBlend) + mtfStrength * mtfBlend : erValue
+
+// ═══════════════════════════════════════════════
+//  vFACTOR — clássico ou adaptado pela eficiência direcional
+// ═══════════════════════════════════════════════
+vFloor   = math.min(erVMin, erVMax)
+vCeiling = math.max(erVMin, erVMax)
+vFactor1 = useAdaptive1 ? vFloor + (vCeiling - vFloor) * math.pow(adaptiveDriver, factorAdp1) : factorFix1
+vFactor2 = useAdaptive2 ? vFloor + (vCeiling - vFloor) * math.pow(adaptiveDriver, factorAdp2) : factorFix2
+vFactor3 = useAdaptive3 ? vFloor + (vCeiling - vFloor) * math.pow(adaptiveDriver, factorAdp3) : factorFix3
+
+// Disponível na Janela de Dados para facilitar calibração e comparação.
+plot(erValue, title="Efficiency Ratio", display=display.data_window, editable=false)
+plot(useMTFIntel ? mtfScore * 100.0 : na, title="Consenso MTF (%)", display=display.data_window, editable=false)
+
+// Deslocamento vertical visual por ATR.
+// Pine nao permite mover plots por pixel real; esta simulacao fica proporcional ao ativo/timeframe.
+vMoveStep1 = atrVal * vStrength1
+vMoveStep2 = atrVal * vStrength2
+vMoveStep3 = atrVal * vStrength3
+
+// ═══════════════════════════════════════════════
+//  FUNCAO T3 (Tilson 1998 — GD approach)
+//  GD(n,v) = EMA(n)*(1+v) - EMA(EMA(n))*v
+//  T3 = GD(GD(GD(n)))
+//  Expandido: c1*e6 + c2*e5 + c3*e4 + c4*e3
+// ═══════════════════════════════════════════════
+t3calc(source, len, smooth, vf, hScaleIn, vScaleIn) =>
+    sc = math.max(1, math.round(len * hScaleIn))
+    e  = math.max(0.0, math.min(2.0, vf))
+    c1 = -math.pow(e, 3)
+    c2 =  3 * math.pow(e, 2) + 3 * math.pow(e, 3)
+    c3 = -6 * math.pow(e, 2) - 3 * e - 3 * math.pow(e, 3)
+    c4 =  1 + 3 * e + math.pow(e, 3) + 3 * math.pow(e, 2)
+    e1 = ta.ema(source, sc)
+    e2 = ta.ema(e1, sc)
+    e3 = ta.ema(e2, sc)
+    e4 = ta.ema(e3, sc)
+    e5 = ta.ema(e4, sc)
+    e6 = ta.ema(e5, sc)
+    base = c1*e6 + c2*e5 + c3*e4 + c4*e3
+    smoothed = smooth > 0 ? ta.sma(base, smooth) : base
+    mean = ta.sma(smoothed, 10)
+    (smoothed - mean) * vScaleIn + mean
+
+t3fibo(source, len, vf, hScaleIn, vScaleIn) =>
+    sc = math.max(1, math.round(len * hScaleIn))
+    e1 = ta.ema(source, sc)
+    e2 = ta.ema(e1, sc)
+    e3 = ta.ema(e2, sc)
+    e4 = ta.ema(e3, sc)
+    e5 = ta.ema(e4, sc)
+    e6 = ta.ema(e5, sc)
+    a  = math.max(0.01, math.min(2.0, vf))
+    c1 = -a * a * a
+    c2 = 3 * a * a + 3 * a * a * a
+    c3 = -6 * a * a - 3 * a - 3 * a * a * a
+    c4 = 1 + 3 * a + a * a * a + 3 * a * a
+    base = c1 * e6 + c2 * e5 + c3 * e4 + c4 * e3
+    mean = ta.sma(base, 10)
+    (base - mean) * vScaleIn + mean
+
+// ═══════════════════════════════════════════════
+//  CALCULOS DOS 3 T3
+// ═══════════════════════════════════════════════
+t1Raw = t3calc(src, lengthT1, smoothT1, vFactor1, hScale1, vScale1)
+t2Raw = t3calc(src, lengthT2, smoothT2, vFactor2, hScale2, vScale2)
+t3Raw = t3calc(src, lengthT3, smoothT3, vFactor3, hScale3, vScale3)
+
+t1 = t1Raw + (vOffset1 * vMoveStep1)
+t2 = t2Raw + (vOffset2 * vMoveStep2)
+t3 = t3Raw + (vOffset3 * vMoveStep3)
+
+t1Fibo = t3fibo(srcHLCC4, lengthFiboT1, vfFiboT1, hScale1, vScale1) + (vOffset1 * vMoveStep1)
+t2Fibo = t3fibo(srcHLCC4, lengthFiboT2, vfFiboT2, hScale2, vScale2) + (vOffset2 * vMoveStep2)
+t3Fibo = t3fibo(srcHLCC4, lengthFiboT3, vfFiboT3, hScale3, vScale3) + (vOffset3 * vMoveStep3)
+
+// ═══════════════════════════════════════════════
+//  CORES
+// ═══════════════════════════════════════════════
+isUp1 = t1 > t1[1]
+isUp2 = t2 > t2[1]
+isUp3 = t3 > t3[1]
+
+isDn1 = t1 < t1[1]
+isDn2 = t2 < t2[1]
+isDn3 = t3 < t3[1]
+
+isUpFibo1 = t1Fibo > t1Fibo[1]
+isUpFibo2 = t2Fibo > t2Fibo[1]
+isUpFibo3 = t3Fibo > t3Fibo[1]
+
+isDnFibo1 = t1Fibo < t1Fibo[1]
+isDnFibo2 = t2Fibo < t2Fibo[1]
+isDnFibo3 = t3Fibo < t3Fibo[1]
+
+// ═══════════════════════════════════════════════
+//  PLOTAGEM
+// ═══════════════════════════════════════════════
+plot(showT1 ? t1 : na, title="Tilson 1 (Valor)", display=display.status_line + display.data_window, editable=false)
+plot(showT2 ? t2 : na, title="Tilson 2 (Valor)", display=display.status_line + display.data_window, editable=false)
+plot(showT3 ? t3 : na, title="Tilson 3 (Valor)", display=display.status_line + display.data_window, editable=false)
+
+t1LineColor = isUp1 ? t1LineUp : t1LineDn
+t1ShadowColor = isUp1 ? t1ShadowUp : t1ShadowDn
+t1FiboColor = isUpFibo1 ? t1FiboUp : isDnFibo1 ? t1FiboDn : t1FiboNt
+
+plot(showT1 ? t1 : na, title="Tilson 1 Sombra", color=t1ShadowColor, linewidth=shadowWidth1, offset=hOffset1, display=display.pane, editable=false)
+plot(showT1 ? t1 : na, title="Tilson 1", color=t1LineColor, linewidth=mainWidth1, offset=hOffset1, display=display.pane, editable=false)
+plot(showT1 and showFiboT1 ? t1Fibo : na, title="Tilson 1 Fibo", color=t1FiboColor, linewidth=mainWidth1, offset=hOffset1, display=display.pane, editable=false)
+
+t2LineColor = isUp2 ? t2LineUp : t2LineDn
+t2ShadowColor = isUp2 ? t2ShadowUp : t2ShadowDn
+t2FiboColor = isUpFibo2 ? t2FiboUp : isDnFibo2 ? t2FiboDn : t2FiboNt
+
+plot(showT2 ? t2 : na, title="Tilson 2 Sombra", color=t2ShadowColor, linewidth=shadowWidth2, offset=hOffset2, display=display.pane, editable=false)
+plot(showT2 ? t2 : na, title="Tilson 2", color=t2LineColor, linewidth=mainWidth2, offset=hOffset2, display=display.pane, editable=false)
+plot(showT2 and showFiboT2 ? t2Fibo : na, title="Tilson 2 Fibo", color=t2FiboColor, linewidth=mainWidth2, offset=hOffset2, display=display.pane, editable=false)
+
+t3LineColor = isUp3 ? t3LineUp : t3LineDn
+t3ShadowColor = isUp3 ? t3ShadowUp : t3ShadowDn
+t3FiboColor = isUpFibo3 ? t3FiboUp : isDnFibo3 ? t3FiboDn : t3FiboNt
+
+plot(showT3 ? t3 : na, title="Tilson 3 Sombra", color=t3ShadowColor, linewidth=shadowWidth3, offset=hOffset3, display=display.pane, editable=false)
+plot(showT3 ? t3 : na, title="Tilson 3", color=t3LineColor, linewidth=mainWidth3, offset=hOffset3, display=display.pane, editable=false)
+plot(showT3 and showFiboT3 ? t3Fibo : na, title="Tilson 3 Fibo", color=t3FiboColor, linewidth=mainWidth3, offset=hOffset3, display=display.pane, editable=false)
+
+// ═══════════════════════════════════════════════
+//  SINAIS — mudança de cor
+// ═══════════════════════════════════════════════
+mtfBullAllowed = not useMTFIntel or not mtfFilterSignals or not mtfReady or mtfScore >= mtfThreshold
+mtfBearAllowed = not useMTFIntel or not mtfFilterSignals or not mtfReady or mtfScore <= -mtfThreshold
+
+sigUp1 = ta.crossover(t1, t1[1]) and mtfBullAllowed
+sigDn1 = ta.crossunder(t1, t1[1]) and mtfBearAllowed
+sigUp2 = ta.crossover(t2, t2[1]) and mtfBullAllowed
+sigDn2 = ta.crossunder(t2, t2[1]) and mtfBearAllowed
+sigUp3 = ta.crossover(t3, t3[1]) and mtfBullAllowed
+sigDn3 = ta.crossunder(t3, t3[1]) and mtfBearAllowed
+
+plotchar(showT1 and showSigT1 and sigUp1, title="Sinal Alta (Tilson 1)", char="▲", location=location.belowbar, color=t1LineUp, size=size.small, offset=hOffset1, display=display.pane)
+plotchar(showT1 and showSigT1 and sigDn1, title="Sinal Baixa (Tilson 1)", char="▼", location=location.abovebar, color=t1LineDn, size=size.small, offset=hOffset1, display=display.pane)
+plotchar(showT2 and showSigT2 and sigUp2, title="Sinal Alta (Tilson 2)", char="▲", location=location.belowbar, color=t2LineUp, size=size.small, offset=hOffset2, display=display.pane)
+plotchar(showT2 and showSigT2 and sigDn2, title="Sinal Baixa (Tilson 2)", char="▼", location=location.abovebar, color=t2LineDn, size=size.small, offset=hOffset2, display=display.pane)
+plotchar(showT3 and showSigT3 and sigUp3, title="Sinal Alta (Tilson 3)", char="▲", location=location.belowbar, color=t3LineUp, size=size.small, offset=hOffset3, display=display.pane)
+plotchar(showT3 and showSigT3 and sigDn3, title="Sinal Baixa (Tilson 3)", char="▼", location=location.abovebar, color=t3LineDn, size=size.small, offset=hOffset3, display=display.pane)
+
+// ═══════════════════════════════════════════════
+//  SINAIS — cruzamento 1 x 2 / 2 x 3
+// ═══════════════════════════════════════════════
+crossUp1   = ta.crossover(t1, t2) and mtfBullAllowed
+crossDn1   = ta.crossunder(t1, t2) and mtfBearAllowed
+crossUp2   = ta.crossover(t2, t3) and mtfBullAllowed
+crossDn2   = ta.crossunder(t2, t3) and mtfBearAllowed
+
+// ═══════════════════════════════════════════════
+//  PAINEL DE CONSENSO MTF
+// ═══════════════════════════════════════════════
+mtfStateText(state) =>
+    na(state) ? "IGNORADO" : state > 0 ? "ALTA" : state < 0 ? "BAIXA" : "NEUTRO"
+
+mtfStateColor(state) =>
+    na(state) ? color.new(color.gray, 70) : state > 0 ? color.new(color.green, 35) : state < 0 ? color.new(color.red, 35) : color.new(color.yellow, 45)
+
+var table mtfPanel = table.new(position.top_right, 2, 8, frame_color=color.new(color.gray, 40), frame_width=1)
+
+if barstate.islast
+    if useMTFIntel and showMTFTable
+        table.cell(mtfPanel, 0, 0, "T3 MTF", text_color=color.white, bgcolor=color.new(color.blue, 35))
+        table.cell(mtfPanel, 1, 0, "DIRECAO", text_color=color.white, bgcolor=color.new(color.blue, 35))
+        table.cell(mtfPanel, 0, 1, res, text_color=color.white)
+        table.cell(mtfPanel, 1, 1, mtfStateText(mtfBase), text_color=color.white, bgcolor=mtfStateColor(mtfBase))
+        table.cell(mtfPanel, 0, 2, mtfTF1, text_color=color.white)
+        table.cell(mtfPanel, 1, 2, mtfStateText(mtfState1), text_color=color.white, bgcolor=mtfStateColor(mtfState1))
+        table.cell(mtfPanel, 0, 3, mtfTF2, text_color=color.white)
+        table.cell(mtfPanel, 1, 3, mtfStateText(mtfState2), text_color=color.white, bgcolor=mtfStateColor(mtfState2))
+        table.cell(mtfPanel, 0, 4, mtfTF3, text_color=color.white)
+        table.cell(mtfPanel, 1, 4, mtfStateText(mtfState3), text_color=color.white, bgcolor=mtfStateColor(mtfState3))
+        table.cell(mtfPanel, 0, 5, mtfTF4, text_color=color.white)
+        table.cell(mtfPanel, 1, 5, mtfStateText(mtfState4), text_color=color.white, bgcolor=mtfStateColor(mtfState4))
+        table.cell(mtfPanel, 0, 6, mtfTF5, text_color=color.white)
+        table.cell(mtfPanel, 1, 6, mtfStateText(mtfState5), text_color=color.white, bgcolor=mtfStateColor(mtfState5))
+        scoreColor = not mtfReady ? color.new(color.gray, 55) : mtfScore >= mtfThreshold ? color.new(color.green, 20) : mtfScore <= -mtfThreshold ? color.new(color.red, 20) : color.new(color.orange, 25)
+        scoreText = mtfReady ? str.tostring(mtfScore * 100.0, "#.0") + "%" : "SEM DADOS"
+        table.cell(mtfPanel, 0, 7, "CONSENSO", text_color=color.white, bgcolor=scoreColor)
+        table.cell(mtfPanel, 1, 7, scoreText, text_color=color.white, bgcolor=scoreColor)
+    else
+        table.clear(mtfPanel, 0, 0, 1, 7)
+
+// ═══════════════════════════════════════════════
+//  ALERTAS
+// ═══════════════════════════════════════════════
+t1Buy = sigUp1
+t1Sell = sigDn1
+t1Color = t1Buy or t1Sell
+
+t2Buy = sigUp2
+t2Sell = sigDn2
+t2Color = t2Buy or t2Sell
+
+t3Buy = sigUp3
+t3Sell = sigDn3
+t3Color = t3Buy or t3Sell
+
+alertcondition(t1Buy, title="Tilson 1 BUY", message="Tilson 1 BUY!")
+alertcondition(t1Sell, title="Tilson 1 SELL", message="Tilson 1 SELL!")
+alertcondition(t1Color, title="Tilson 1 Color ALARM", message="Tilson 1 has changed color!")
+
+alertcondition(t2Buy, title="Tilson 2 BUY", message="Tilson 2 BUY!")
+alertcondition(t2Sell, title="Tilson 2 SELL", message="Tilson 2 SELL!")
+alertcondition(t2Color, title="Tilson 2 Color ALARM", message="Tilson 2 has changed color!")
+
+alertcondition(t3Buy, title="Tilson 3 BUY", message="Tilson 3 BUY!")
+alertcondition(t3Sell, title="Tilson 3 SELL", message="Tilson 3 SELL!")
+alertcondition(t3Color, title="Tilson 3 Color ALARM", message="Tilson 3 has changed color!")
+
+alertcondition(crossUp1, "Tilson 1 cruza Tilson 2 — Alta",  "Tilson: 1 cruzou 2 para CIMA")
+alertcondition(crossDn1, "Tilson 1 cruza Tilson 2 — Baixa", "Tilson: 1 cruzou 2 para BAIXO")
+alertcondition(crossUp2, "Tilson 2 cruza Tilson 3 — Alta",  "Tilson: 2 cruzou 3 para CIMA")
+alertcondition(crossDn2, "Tilson 2 cruza Tilson 3 — Baixa", "Tilson: 2 cruzou 3 para BAIXO")
+
+mtfConsensusUpRaw = ta.crossover(mtfScore, mtfThreshold)
+mtfConsensusDnRaw = ta.crossunder(mtfScore, -mtfThreshold)
+mtfConsensusUp = useMTFIntel and mtfReady and mtfConsensusUpRaw
+mtfConsensusDn = useMTFIntel and mtfReady and mtfConsensusDnRaw
+alertcondition(mtfConsensusUp, "Consenso MTF — Alta", "Tilson: consenso multi-timeframe confirmou ALTA")
+alertcondition(mtfConsensusDn, "Consenso MTF — Baixa", "Tilson: consenso multi-timeframe confirmou BAIXA")
