@@ -1,0 +1,135 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.wrap{padding:1rem 0;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+col.c-rank{width:36px}
+col.c-cod{width:64px}
+col.c-nome{width:180px}
+col.c-score{width:52px}
+col.c-acerto{width:72px}
+col.c-falso{width:80px}
+col.c-lag{width:72px}
+col.c-regime{width:90px}
+col.c-uso{width:auto}
+thead tr{border-bottom:1.5px solid var(--border-strong)}
+thead th{padding:6px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--text-secondary);white-space:nowrap;user-select:none}
+thead th.num{text-align:right}
+tbody tr{border-bottom:0.5px solid var(--border)}
+tbody tr:hover{background:var(--surface-1)}
+td{padding:5px 8px;color:var(--text-primary);vertical-align:middle}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.cod{font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--text-accent)}
+td.rank{text-align:center;font-weight:500;color:var(--text-muted);font-size:11px}
+td.nome{font-size:11.5px}
+td.uso{font-size:11px;color:var(--text-secondary)}
+.bar-wrap{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.bar{height:8px;border-radius:2px;min-width:2px}
+.badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:var(--radius);font-weight:500;white-space:nowrap}
+.ba{background:#E6F1FB;color:#185FA5}
+.bt{background:#E1F5EE;color:#0F6E56}
+.bc{background:#FAEEDA;color:#854F0B}
+.bp{background:#EEEDFE;color:#3C3489}
+[data-mode=dark] .ba{background:#0C447C;color:#B5D4F4}
+[data-mode=dark] .bt{background:#085041;color:#9FE1CB}
+[data-mode=dark] .bc{background:#633806;color:#FAC775}
+[data-mode=dark] .bp{background:#3C3489;color:#CECBF6}
+.fl-low{color:#0F6E56;font-weight:500}
+.fl-med{color:#854F0B;font-weight:500}
+.fl-hi{color:#993C1D;font-weight:500}
+.fl-vhi{color:#A32D2D;font-weight:500}
+</style>
+<div class="wrap">
+<table>
+<colgroup>
+<col class="c-rank"><col class="c-cod"><col class="c-nome">
+<col class="c-score"><col class="c-acerto"><col class="c-falso">
+<col class="c-lag"><col class="c-regime"><col class="c-uso">
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Código</th>
+<th>Nome</th>
+<th class="num">Score</th>
+<th class="num">Acerto*</th>
+<th class="num">Falsos sinais</th>
+<th class="num">Lag (n=20)</th>
+<th>Regime</th>
+<th>Uso recomendado</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+<p style="margin-top:10px;font-size:10px;color:var(--text-muted);">* Acerto direcional indicativo k=5 barras. Bandas estimadas, não garantidas.</p>
+</div>
+<script>
+const data=[
+[1,"JMA","Jurik Moving Average",88,"58–63%","Muito baixo","2–4","Ambos","Linha principal; phase 0, power 2"],
+[2,"KAMA","Kaufman's Adaptive MA",86,"57–62%","Muito baixo","2–20","Ambos","Filtro de regime + sinal"],
+[3,"T3","Tillson T3",84,"56–61%","Muito baixo","8–12","Tendência","Baseline suave; v=0.7"],
+[4,"FRAMA","Fractal Adaptive MA",82,"56–61%","Baixo","2–20","Ambos","Trava lateral, solta em tendência"],
+[5,"DSMA","Deviation-Scaled MA",81,"55–60%","Baixo","4–8","Ambos","Alternativa moderna ao KAMA"],
+[6,"VIDYA","Variable Index Dynamic Avg",79,"55–60%","Baixo","3–15","Ambos","Cripto / vol variável"],
+[7,"ADXVMA","ADX Variable MA",78,"55–59%","Muito baixo","5–25","Tendência","Trailing stop / viés"],
+[8,"TRAMA","Trama",77,"54–59%","Muito baixo","3–25","Range","Achata lateral quase a zero"],
+[9,"MAMA","MESA Adaptive MA",76,"54–59%","Baixo","3–15","Cíclico","Par MAMA/FAMA (cruzamento)"],
+[10,"CORAL","Coral Filter",74,"54–58%","Baixo","10–14","Tendência","Viés visual / colorização"],
+[11,"REMA","Regularized EMA",73,"53–58%","Baixo","5–7","Ambos","EMA civilizada; λ=0.5"],
+[12,"HTIT","Hilbert Trendline",71,"53–57%","Baixo","6–8","Cíclico","Zero parâmetro; 63 barras aquec."],
+[13,"DECYCLER","Ehlers Decycler",70,"53–57%","Baixo","4–6","Tendência","Remove ciclo, mantém tendência"],
+[14,"RGMA","Recursive Gaussian MA",68,"52–57%","Muito baixo","12–18","Tendência","Timeframes altos (H4/D1)"],
+[15,"HEMA","Hull EMA",67,"52–56%","Médio","2–3","Tendência","Rápida com forma limpa"],
+[16,"YZVAMA","Yang-Zhang Vol Adj. MA",66,"52–56%","Baixo","5–12","Ambos","Só com OHLC confiável"],
+[17,"VAMA","Volatility Adjusted MA",65,"52–56%","Baixo","5–12","Ambos","Ativos com gaps"],
+[18,"ZLEMA","Zero-Lag EMA",64,"51–56%","Médio","1–2","Tendência","Gatilho rápido, nunca sozinha"],
+[19,"MGDI","McGinley Dynamic",63,"51–55%","Baixo","5–7","Ambos","Auto-ajuste sem parâmetro extra"],
+[20,"GDEMA","Generalized Double EMA",62,"51–55%","Médio","4–6","Tendência","v controla agressividade"],
+[21,"TEMA","Triple EMA",60,"50–55%","Alto","~2","Tendência forte","Só com filtro anti-ruído"],
+[22,"DEMA","Double EMA",59,"50–54%","Médio-alto","3–4","Tendência","Substituta da EMA rápida"],
+[23,"HWMA","Holt-Winters MA",57,"50–54%","Alto","1–3","Tendência","3 params = risco de ajuste"],
+[24,"HOLT","Holt Exponential MA",56,"50–54%","Alto","1–3","Tendência","Projeção de curto prazo"],
+[25,"LEMA","Leader EMA",55,"50–54%","Alto","3–5","Tendência","Antecipação de cruzamento"],
+[26,"MCNMA","McNicholl EMA",54,"49–54%","Médio-alto","3–4","Tendência","Variante DEMA"],
+[27,"ZLDEMA","Zero-Lag Double EMA",53,"49–53%","Alto","~1","Tendência forte","Scalp com confirmação"],
+[28,"NMA","Natural Moving Average",52,"49–53%","Médio","5–8","Ambos","Implementação varia muito"],
+[29,"EMA","Exponential MA",51,"49–53%","Médio","9–10","Ambos","Referência de comparação"],
+[30,"AHRENS","Ahrens MA",49,"48–53%","Médio","7–9","Tendência","Nicho"],
+[31,"MAVP","MA Variable Period",48,"var.","var.","var.","Ambos","Só com série de período boa"],
+[32,"LTMA","Linear Time MA",47,"48–52%","Médio","~6","Ambos","Ponderação linear simples"],
+[33,"RMA","Wilder's MA",46,"48–52%","Muito baixo","19–20","Tendência longa","Base de RSI/ATR, não de sinal"],
+[34,"MMA","Modified Moving Average",44,"48–52%","Muito baixo","~19","Tendência longa","Suporte/resistência dinâmico"],
+[35,"QEMA","Quadruple EMA",42,"47–51%","Muito alto","~1","Nenhum isolado","Só como input de outro filtro"],
+[36,"ZLTEMA","Zero-Lag Triple EMA",41,"47–51%","Muito alto","0–1","Nenhum isolado","Só como input de outro filtro"],
+];
+
+const flMap={"Muito baixo":"fl-low","Baixo":"fl-low","Médio":"fl-med","Médio-alto":"fl-hi","Alto":"fl-hi","Muito alto":"fl-vhi","var.":"fl-med"};
+const regMap={"Ambos":"ba","Tendência":"bt","Cíclico":"bc","Range":"bp","Tendência forte":"bt","Tendência longa":"bt","Nenhum isolado":"","":" "};
+
+function scorebar(s){
+  const pct=Math.round((s/100)*120);
+  const col=s>=80?"#1D9E75":s>=65?"#3266ad":s>=50?"#BA7517":"#D85A30";
+  return `<div class="bar-wrap"><span style="font-size:12px;font-weight:500;color:var(--text-primary)">${s}</span><div class="bar" style="width:${pct}px;background:${col}"></div></div>`;
+}
+
+const tb=document.getElementById("tbody");
+data.forEach(r=>{
+  const [rank,cod,nome,score,acerto,falso,lag,regime,uso]=r;
+  const fl=falso.split(",")[0].trim();
+  const flClass=flMap[fl]||"fl-med";
+  const bgClass=regMap[regime]||"";
+  const badge=bgClass?`<span class="badge ${bgClass}">${regime}</span>`:regime;
+  tb.innerHTML+=`<tr>
+    <td class="rank">${rank}</td>
+    <td class="cod">${cod}</td>
+    <td class="nome">${nome}</td>
+    <td class="num">${scorebar(score)}</td>
+    <td class="num" style="font-size:11px">${acerto}</td>
+    <td class="num ${flClass}" style="font-size:11px">${falso}</td>
+    <td class="num" style="font-size:11px">${lag}</td>
+    <td>${badge}</td>
+    <td class="uso">${uso}</td>
+  </tr>`;
+});
+</script>

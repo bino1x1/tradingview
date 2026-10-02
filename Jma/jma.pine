@@ -1,0 +1,339 @@
+//@version=6
+// Copyright (c) 2018-present, Alex Orekhov (everget)
+// Jurik Moving Average Surrogate script may be freely distributed under the MIT license.
+// Controles e multiplas medias adaptados por BinoX.
+indicator('JMA BinoX V3', shorttitle = 'JMA BinoX V3', overlay = true, behind_chart = false)
+
+src = input.source(close, 'Fonte de Preco', group = 'Principal')
+gradientLevel = input.int(1, "Prolongamento do degrade (0 a 5)", minval=0, maxval=5, step=1, group="Principal", tooltip="0 = cores solidas por direcao, sem degrade. 1 = transicao curta; 2 a 5 = progressivamente mais prolongada. Afeta as cores da linha, sombra e halo da ponta, sem alterar a media ou os sinais.")
+highlightDirection = input.bool(true, 'Colorir por direcao', group = 'Principal')
+awaitBarConfirmation = input.bool(true, 'Confirmar direcao no fechamento', group = 'Principal', tooltip = 'Mantem a direcao e as cores anteriores enquanto a vela esta aberta. A linha continua acompanhando o preco.')
+applyBarColors = input.bool(true, 'Colorir candles pela JMA 1', group = 'Principal')
+applyBgColors = input.bool(false, 'Colorir fundo pela JMA 1', group = 'Principal')
+
+// JMA 1
+show1 = input.bool(true, 'Mostrar JMA 1', group = 'JMA 1')
+length1 = input.int(7, 'Period', minval = 1, maxval = 200, group = 'JMA 1')
+phase1 = input.int(100, 'Phase', minval = -1000, maxval = 1000, group = 'JMA 1')
+power1 = input.float(2.0, 'Power', minval = 1.0, step = 0.1, group = 'JMA 1')
+smooth1 = input.int(1, 'Smooth', minval = 0, maxval = 50, group = 'JMA 1', tooltip = 'SMA adicional. 0 ou 1 preserva a JMA sem suavizacao adicional.')
+vScale1 = input.float(1.0, 'Escala Vertical', minval = -100.0, maxval = 100.0, step = 0.05, group = 'JMA 1')
+hScale1 = input.float(1.0, 'Escala Horizontal', minval = 0.01, maxval = 100.0, step = 0.05, group = 'JMA 1', tooltip = 'Multiplica o periodo de calculo da JMA.')
+mainWidth1 = input.int(2, 'Line', minval = 1, group = 'JMA 1', inline = 'width1')
+shadowWidth1 = input.int(10, 'Shadow', minval = 1, group = 'JMA 1', inline = 'width1')
+lineUp1 = input.color(#09b71e, '', group = 'JMA 1', inline = 'colors1')
+lineDn1 = input.color(#e91e63, '', group = 'JMA 1', inline = 'colors1')
+shadowUp1 = input.color(color.new(#09b71e, 70), '', group = 'JMA 1', inline = 'colors1')
+shadowDn1 = input.color(color.new(#e91e63, 70), '', group = 'JMA 1', inline = 'colors1')
+neutralColor1 = input.color(#6d1e7f, '', group = 'JMA 1', inline = 'colors1')
+hOffset1 = input.int(0, 'Offset Horizontal (barras)', minval = -100, maxval = 100, step = 5, group = 'JMA 1')
+vOffset1 = input.int(0, 'Offset Vertical Visual', minval = -100, maxval = 100, group = 'JMA 1')
+vStrength1 = input.float(0.05, 'Forca Vertical ATR', minval = 0.001, maxval = 1.0, step = 0.01, group = 'JMA 1')
+
+// JMA 2
+show2 = input.bool(true, 'Mostrar JMA 2', group = 'JMA 2')
+length2 = input.int(14, 'Period', minval = 1, maxval = 200, group = 'JMA 2')
+phase2 = input.int(0, 'Phase', minval = -1000, maxval = 1000, group = 'JMA 2')
+power2 = input.float(2.0, 'Power', minval = 1.0, step = 0.1, group = 'JMA 2')
+smooth2 = input.int(1, 'Smooth', minval = 0, maxval = 50, group = 'JMA 2', tooltip = 'SMA adicional. 0 ou 1 preserva a JMA sem suavizacao adicional.')
+vScale2 = input.float(1.0, 'Escala Vertical', minval = -100.0, maxval = 100.0, step = 0.05, group = 'JMA 2')
+hScale2 = input.float(1.0, 'Escala Horizontal', minval = 0.01, maxval = 100.0, step = 0.05, group = 'JMA 2', tooltip = 'Multiplica o periodo de calculo da JMA.')
+mainWidth2 = input.int(2, 'Line', minval = 1, group = 'JMA 2', inline = 'width2')
+shadowWidth2 = input.int(10, 'Shadow', minval = 1, group = 'JMA 2', inline = 'width2')
+lineUp2 = input.color(#09b71e, '', group = 'JMA 2', inline = 'colors2')
+lineDn2 = input.color(#e91e63, '', group = 'JMA 2', inline = 'colors2')
+shadowUp2 = input.color(color.new(#09b71e, 70), '', group = 'JMA 2', inline = 'colors2')
+shadowDn2 = input.color(color.new(#e91e63, 70), '', group = 'JMA 2', inline = 'colors2')
+neutralColor2 = input.color(#6d1e7f, '', group = 'JMA 2', inline = 'colors2')
+hOffset2 = input.int(0, 'Offset Horizontal (barras)', minval = -100, maxval = 100, step = 5, group = 'JMA 2')
+vOffset2 = input.int(0, 'Offset Vertical Visual', minval = -100, maxval = 100, group = 'JMA 2')
+vStrength2 = input.float(0.05, 'Forca Vertical ATR', minval = 0.001, maxval = 1.0, step = 0.01, group = 'JMA 2')
+
+// JMA 3
+show3 = input.bool(true, 'Mostrar JMA 3', group = 'JMA 3')
+length3 = input.int(21, 'Period', minval = 1, maxval = 200, group = 'JMA 3')
+phase3 = input.int(-25, 'Phase', minval = -1000, maxval = 1000, group = 'JMA 3')
+power3 = input.float(2.0, 'Power', minval = 1.0, step = 0.1, group = 'JMA 3')
+smooth3 = input.int(1, 'Smooth', minval = 0, maxval = 50, group = 'JMA 3', tooltip = 'SMA adicional. 0 ou 1 preserva a JMA sem suavizacao adicional.')
+vScale3 = input.float(1.0, 'Escala Vertical', minval = -100.0, maxval = 100.0, step = 0.05, group = 'JMA 3')
+hScale3 = input.float(1.0, 'Escala Horizontal', minval = 0.01, maxval = 100.0, step = 0.05, group = 'JMA 3', tooltip = 'Multiplica o periodo de calculo da JMA.')
+mainWidth3 = input.int(2, 'Line', minval = 1, group = 'JMA 3', inline = 'width3')
+shadowWidth3 = input.int(10, 'Shadow', minval = 1, group = 'JMA 3', inline = 'width3')
+lineUp3 = input.color(#00AAFF, '', group = 'JMA 3', inline = 'colors3')
+lineDn3 = input.color(#FF6600, '', group = 'JMA 3', inline = 'colors3')
+shadowUp3 = input.color(color.new(#00AAFF, 70), '', group = 'JMA 3', inline = 'colors3')
+shadowDn3 = input.color(color.new(#FF6600, 70), '', group = 'JMA 3', inline = 'colors3')
+neutralColor3 = input.color(#6d1e7f, '', group = 'JMA 3', inline = 'colors3')
+hOffset3 = input.int(0, 'Offset Horizontal (barras)', minval = -100, maxval = 100, step = 5, group = 'JMA 3')
+vOffset3 = input.int(0, 'Offset Vertical Visual', minval = -100, maxval = 100, group = 'JMA 3')
+vStrength3 = input.float(0.05, 'Forca Vertical ATR', minval = 0.001, maxval = 1.0, step = 0.01, group = 'JMA 3')
+
+// JMA 4
+show4 = input.bool(true, 'Mostrar JMA 4', group = 'JMA 4')
+length4 = input.int(50, 'Period', minval = 1, maxval = 200, group = 'JMA 4')
+phase4 = input.int(0, 'Phase', minval = -1000, maxval = 1000, group = 'JMA 4')
+power4 = input.float(2.0, 'Power', minval = 1.0, step = 0.1, group = 'JMA 4')
+smooth4 = input.int(1, 'Smooth', minval = 0, maxval = 50, group = 'JMA 4', tooltip = 'SMA adicional. 0 ou 1 preserva a JMA sem suavizacao adicional.')
+vScale4 = input.float(1.0, 'Escala Vertical', minval = -100.0, maxval = 100.0, step = 0.05, group = 'JMA 4')
+hScale4 = input.float(1.0, 'Escala Horizontal', minval = 0.01, maxval = 100.0, step = 0.05, group = 'JMA 4', tooltip = 'Multiplica o periodo de calculo da JMA.')
+mainWidth4 = input.int(2, 'Line', minval = 1, group = 'JMA 4', inline = 'width4')
+shadowWidth4 = input.int(10, 'Shadow', minval = 1, group = 'JMA 4', inline = 'width4')
+lineUp4 = input.color(#FFFF00, '', group = 'JMA 4', inline = 'colors4')
+lineDn4 = input.color(#FF00FF, '', group = 'JMA 4', inline = 'colors4')
+shadowUp4 = input.color(color.new(#FFFF00, 70), '', group = 'JMA 4', inline = 'colors4')
+shadowDn4 = input.color(color.new(#FF00FF, 70), '', group = 'JMA 4', inline = 'colors4')
+neutralColor4 = input.color(#6d1e7f, '', group = 'JMA 4', inline = 'colors4')
+hOffset4 = input.int(0, 'Offset Horizontal (barras)', minval = -100, maxval = 100, step = 5, group = 'JMA 4')
+vOffset4 = input.int(0, 'Offset Vertical Visual', minval = -100, maxval = 100, group = 'JMA 4')
+vStrength4 = input.float(0.05, 'Forca Vertical ATR', minval = 0.001, maxval = 1.0, step = 0.01, group = 'JMA 4')
+
+// Nivel 5 equivale ao antigo nivel 1; niveis menores estreitam a transicao.
+// Sem suavizacao adicional para nao atrasar a cor em relacao a inclinacao.
+useGradient = gradientLevel > 0
+gradientWindow = 100
+gradientSmooth = 1
+gradientRange = 0.06 * math.max(1, gradientLevel)
+
+gradientStrength(float value) =>
+    slope = nz(value - value[1])
+    scale = ta.highest(math.abs(slope), gradientWindow)
+    normalized = scale > 0 ? slope / scale : 0.0
+    ta.ema(normalized, gradientSmooth)
+
+// Cada chamada tem seu proprio historico recursivo.
+jmaConfigured(source, len, phase, power, smooth, hScale, vScale) =>
+    effectiveLength = math.max(1, math.round(len * hScale))
+    phaseRatio = phase / 100.0 + 1.5
+    beta = 0.45 * (effectiveLength - 1) / (0.45 * (effectiveLength - 1) + 2)
+    alpha = math.pow(beta, power)
+    jma = 0.0
+    e0 = 0.0
+    e0 := (1 - alpha) * source + alpha * nz(e0[1])
+    e2 = 0.0
+    e2 := (1 - beta) * (source - e0) + beta * nz(e2[1])
+    e3 = 0.0
+    e3 := math.pow(1 - alpha, 2) * (e0 + phaseRatio * e2 - nz(jma[1])) + math.pow(alpha, 2) * nz(e3[1])
+    jma := e3 + nz(jma[1])
+    smoothed = ta.sma(jma, math.max(1, smooth))
+    mean = ta.sma(smoothed, 10)
+    vScale == 1.0 ? smoothed : (smoothed - mean) * vScale + mean
+
+atrValue = ta.atr(14)
+directionReady = not awaitBarConfirmation or barstate.isconfirmed
+
+raw1 = jmaConfigured(src, length1, phase1, power1, smooth1, hScale1, vScale1)
+// Direcao antes do offset visual; trechos planos preservam a direcao anterior.
+var bool isUp1 = false
+if directionReady
+    if raw1 > raw1[1]
+        isUp1 := true
+    else if raw1 < raw1[1]
+        isUp1 := false
+value1 = raw1 + (vOffset1 == 0 ? 0.0 : vOffset1 * atrValue * vStrength1)
+strengthLive1 = gradientStrength(raw1)
+strength1 = directionReady ? strengthLive1 : nz(strengthLive1[1])
+lineColor1 = not highlightDirection ? neutralColor1 : useGradient ? color.from_gradient(strength1, -gradientRange, gradientRange, lineDn1, lineUp1) : (isUp1 ? lineUp1 : lineDn1)
+shadowColor1 = not highlightDirection ? color.new(neutralColor1, 70) : useGradient ? color.from_gradient(strength1, -gradientRange, gradientRange, shadowDn1, shadowUp1) : (isUp1 ? shadowUp1 : shadowDn1)
+plot(show1 ? value1 : na, title = 'JMA 1 (Valor)', display = display.status_line + display.data_window, editable = false)
+plot(show1 ? value1 : na, title = 'JMA 1 Sombra', color = shadowColor1, linewidth = shadowWidth1, offset = hOffset1, display = display.pane, editable = false)
+plot(show1 ? value1 : na, title = 'JMA 1', color = lineColor1, linewidth = mainWidth1, offset = hOffset1, display = display.pane, editable = false)
+
+raw2 = jmaConfigured(src, length2, phase2, power2, smooth2, hScale2, vScale2)
+// Direcao antes do offset visual; trechos planos preservam a direcao anterior.
+var bool isUp2 = false
+if directionReady
+    if raw2 > raw2[1]
+        isUp2 := true
+    else if raw2 < raw2[1]
+        isUp2 := false
+value2 = raw2 + (vOffset2 == 0 ? 0.0 : vOffset2 * atrValue * vStrength2)
+strengthLive2 = gradientStrength(raw2)
+strength2 = directionReady ? strengthLive2 : nz(strengthLive2[1])
+lineColor2 = not highlightDirection ? neutralColor2 : useGradient ? color.from_gradient(strength2, -gradientRange, gradientRange, lineDn2, lineUp2) : (isUp2 ? lineUp2 : lineDn2)
+shadowColor2 = not highlightDirection ? color.new(neutralColor2, 70) : useGradient ? color.from_gradient(strength2, -gradientRange, gradientRange, shadowDn2, shadowUp2) : (isUp2 ? shadowUp2 : shadowDn2)
+plot(show2 ? value2 : na, title = 'JMA 2 (Valor)', display = display.status_line + display.data_window, editable = false)
+plot(show2 ? value2 : na, title = 'JMA 2 Sombra', color = shadowColor2, linewidth = shadowWidth2, offset = hOffset2, display = display.pane, editable = false)
+plot(show2 ? value2 : na, title = 'JMA 2', color = lineColor2, linewidth = mainWidth2, offset = hOffset2, display = display.pane, editable = false)
+
+raw3 = jmaConfigured(src, length3, phase3, power3, smooth3, hScale3, vScale3)
+// Direcao antes do offset visual; trechos planos preservam a direcao anterior.
+var bool isUp3 = false
+if directionReady
+    if raw3 > raw3[1]
+        isUp3 := true
+    else if raw3 < raw3[1]
+        isUp3 := false
+value3 = raw3 + (vOffset3 == 0 ? 0.0 : vOffset3 * atrValue * vStrength3)
+strengthLive3 = gradientStrength(raw3)
+strength3 = directionReady ? strengthLive3 : nz(strengthLive3[1])
+lineColor3 = not highlightDirection ? neutralColor3 : useGradient ? color.from_gradient(strength3, -gradientRange, gradientRange, lineDn3, lineUp3) : (isUp3 ? lineUp3 : lineDn3)
+shadowColor3 = not highlightDirection ? color.new(neutralColor3, 70) : useGradient ? color.from_gradient(strength3, -gradientRange, gradientRange, shadowDn3, shadowUp3) : (isUp3 ? shadowUp3 : shadowDn3)
+plot(show3 ? value3 : na, title = 'JMA 3 (Valor)', display = display.status_line + display.data_window, editable = false)
+plot(show3 ? value3 : na, title = 'JMA 3 Sombra', color = shadowColor3, linewidth = shadowWidth3, offset = hOffset3, display = display.pane, editable = false)
+plot(show3 ? value3 : na, title = 'JMA 3', color = lineColor3, linewidth = mainWidth3, offset = hOffset3, display = display.pane, editable = false)
+
+raw4 = jmaConfigured(src, length4, phase4, power4, smooth4, hScale4, vScale4)
+// Direcao antes do offset visual; trechos planos preservam a direcao anterior.
+var bool isUp4 = false
+if directionReady
+    if raw4 > raw4[1]
+        isUp4 := true
+    else if raw4 < raw4[1]
+        isUp4 := false
+value4 = raw4 + (vOffset4 == 0 ? 0.0 : vOffset4 * atrValue * vStrength4)
+strengthLive4 = gradientStrength(raw4)
+strength4 = directionReady ? strengthLive4 : nz(strengthLive4[1])
+lineColor4 = not highlightDirection ? neutralColor4 : useGradient ? color.from_gradient(strength4, -gradientRange, gradientRange, lineDn4, lineUp4) : (isUp4 ? lineUp4 : lineDn4)
+shadowColor4 = not highlightDirection ? color.new(neutralColor4, 70) : useGradient ? color.from_gradient(strength4, -gradientRange, gradientRange, shadowDn4, shadowUp4) : (isUp4 ? shadowUp4 : shadowDn4)
+plot(show4 ? value4 : na, title = 'JMA 4 (Valor)', display = display.status_line + display.data_window, editable = false)
+plot(show4 ? value4 : na, title = 'JMA 4 Sombra', color = shadowColor4, linewidth = shadowWidth4, offset = hOffset4, display = display.pane, editable = false)
+plot(show4 ? value4 : na, title = 'JMA 4', color = lineColor4, linewidth = mainWidth4, offset = hOffset4, display = display.pane, editable = false)
+
+// Candles e fundo seguem a direcao confirmada da JMA 1.
+candleColor = isUp1 ? color.new(#4CAF50, 50) : color.new(#F44336, 50)
+barcolor(applyBarColors ? candleColor : na, title = 'Bar Color')
+plotcandle(applyBarColors ? open : na, applyBarColors ? high : na, applyBarColors ? low : na, applyBarColors ? close : na, title = 'Candles JMA 1', color = candleColor, wickcolor = candleColor, bordercolor = candleColor, editable = true)
+bgColor = isUp1 ? color.new(#4CAF50, 88) : color.new(#F44336, 88)
+bgcolor(applyBgColors ? bgColor : na, title = 'Background Color')
+
+// ═══════════════════════════════════════════════
+//  HALO RECORRENTE NA PONTA DAS MEDIAS
+// ═══════════════════════════════════════════════
+showRadar = input.bool(true, "Mostrar halo na ponta das linhas", group="Halo")
+radarMode = input.string("Por atualizacao", "Ritmo do pulso", options=["Por atualizacao", "Por tempo"], group="Halo", tooltip="Por atualizacao avanca uma etapa a cada tick, evitando repetir a mesma fase com ticks espacados. Ambos os modos precisam de dados ao vivo.")
+radarTicks = input.int(24, "Atualizacoes por ciclo", minval=4, maxval=200, group="Halo", active=radarMode == "Por atualizacao")
+radarSeconds = input.float(2.0, "Duracao do ciclo (segundos)", minval=0.3, maxval=10.0, step=0.1, group="Halo", tooltip="O pulso avanca quando chegam atualizacoes do mercado. Sem novos ticks, a animacao fica parada.")
+radarDotSize = input.int(7, "Tamanho do ponto", minval=1, maxval=30, group="Halo", tooltip="Tamanho tipografico do simbolo; nao representa pixels exatos.")
+radarExpansion = input.int(20, "Expansao dos aneis", minval=4, maxval=60, group="Halo")
+radarTransparency = input.int(35, "Transparencia inicial dos aneis", minval=0, maxval=100, group="Halo", tooltip="0 = opaco no inicio do pulso; 100 = invisivel. Independe da transparencia da linha.")
+radarPointTransparency = input.int(0, "Transparencia do ponto", minval=0, maxval=100, group="Halo")
+radarPointFixed = input.bool(false, "Sobrescrever cor do ponto", group="Halo", inline="radarPoint")
+radarPointColor = input.color(color.white, "Cor fixa", group="Halo", inline="radarPoint", active=radarPointFixed)
+radarRingFixed = input.bool(false, "Sobrescrever cor dos aneis", group="Halo", inline="radarRing")
+radarRingColor = input.color(color.aqua, "Cor fixa", group="Halo", inline="radarRing", active=radarRingFixed)
+
+// varip preserva a fase entre ticks e entre barras; nao e reiniciada pelo rollback.
+varip float radarTickPhase = 0.0
+if barstate.isrealtime
+    radarTickPhase := (radarTickPhase + 1.0 / radarTicks) % 1.0
+
+// Cada chamada conserva apenas tres labels, reutilizados em todas as barras.
+// Os simbolos vazados aproximam um radar sem cobrir o interior com uma cor solida.
+// timenow controla somente o desenho: nao interfere nos calculos ou sinais.
+drawRadar(float value, color lineColor, bool visible, int horizontalOffset) =>
+    var label ring1 = label.new(na, na, "○", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_none, textalign=text.align_center)
+    var label ring2 = label.new(na, na, "○", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_none, textalign=text.align_center)
+    var label dot = label.new(na, na, "●", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_none, textalign=text.align_center)
+    if barstate.islast
+        active = showRadar and visible and not na(value) and not na(lineColor)
+        x = bar_index + horizontalOffset
+        y = active ? value : na
+        cycleMs = radarSeconds * 1000.0
+        phase1 = radarMode == "Por atualizacao" ? radarTickPhase : (timenow % cycleMs) / cycleMs
+        phase2 = (phase1 + 0.5) % 1.0
+        // Transparencias explicitas substituem a transparencia da linha/cor.
+        pointRgb = radarPointFixed ? radarPointColor : lineColor
+        ringRgb = radarRingFixed ? radarRingColor : lineColor
+        alpha1 = radarTransparency + (100.0 - radarTransparency) * phase1
+        alpha2 = radarTransparency + (100.0 - radarTransparency) * phase2
+        label.set_xy(ring1, x, y)
+        label.set_xy(ring2, x, y)
+        label.set_xy(dot, x, y)
+        label.set_size(ring1, radarDotSize + int(math.round(radarExpansion * phase1)))
+        label.set_size(ring2, radarDotSize + int(math.round(radarExpansion * phase2)))
+        label.set_size(dot, radarDotSize)
+        label.set_textcolor(ring1, color.new(ringRgb, alpha1))
+        label.set_textcolor(ring2, color.new(ringRgb, alpha2))
+        label.set_textcolor(dot, color.new(pointRgb, radarPointTransparency))
+    true
+
+drawRadar(value1, lineColor1, show1, hOffset1)
+drawRadar(value2, lineColor2, show2, hOffset2)
+drawRadar(value3, lineColor3, show3, hOffset3)
+drawRadar(value4, lineColor4, show4, hOffset4)
+
+
+// PONTOS FIXOS NAS VIRADAS — independentes do radar na ponta.
+// Uma marca por troca de sinal da inclinacao usada pelo degrade.
+// O ponto fica no inicio do segmento com a nova direcao (barra anterior).
+// E desenhado somente apos a deteccao/confirmacao na barra atual.
+showTurns = input.bool(true, "Mostrar ponto com halo nas viradas", group="Viradas")
+showTurnPoint = input.bool(true, "Mostrar ponto", group="Viradas")
+showTurnHalo = input.bool(true, "Mostrar halo", group="Viradas")
+turnPointWidth = input.int(2, "Tamanho do ponto", minval=1, maxval=30, step=1, group="Viradas", tooltip="Aceita 1, 5, 10 etc. Escala relativa de circulos do TradingView; nao e diametro exato em pixels.")
+turnHaloWidth = input.int(5, "Tamanho do halo", minval=1, maxval=50, step=1, group="Viradas", tooltip="Use um valor maior que o ponto para ver o halo ao redor. Escala relativa, nao pixels exatos.")
+turnPointTransparency = input.int(0, "Transparencia do ponto", minval=0, maxval=100, group="Viradas", tooltip="0 = opaco; 100 = invisivel. Substitui a transparencia da cor selecionada e da linha.")
+turnTransparency = input.int(50, "Transparencia do halo", minval=0, maxval=100, group="Viradas", tooltip="0 = opaco; 100 = invisivel. Independente do ponto e da linha; a linha continua visivel por baixo.")
+turnPointFixed = input.bool(false, "Sobrescrever cor do ponto", group="Viradas", inline="pointColor")
+turnPointColor = input.color(color.white, "Cor fixa", group="Viradas", inline="pointColor", active=turnPointFixed)
+turnHaloFixed = input.bool(false, "Sobrescrever cor do halo", group="Viradas", inline="haloColor")
+turnHaloColor = input.color(color.aqua, "Cor fixa", group="Viradas", inline="haloColor", active=turnHaloFixed)
+// As cores fornecem o RGB; os controles numericos acima definem a transparencia.
+
+var int turnSide1 = 0
+if directionReady and not na(raw1[2])
+    if useGradient
+        if strength1 > 0
+            turnSide1 := 1
+        else if strength1 < 0
+            turnSide1 := -1
+    else
+        turnSide1 := isUp1 ? 1 : -1
+turn1 = directionReady and nz(turnSide1[1]) != 0 and turnSide1 != turnSide1[1]
+turnValue1 = showTurns and show1 and turn1 ? value1[1] : na
+turnColor1 = highlightDirection ? (turnSide1 > 0 ? lineUp1 : lineDn1) : neutralColor1
+turnHaloColor1 = color.new(turnHaloFixed ? turnHaloColor : turnColor1, turnTransparency)
+turnPointDrawColor1 = color.new(turnPointFixed ? turnPointColor : turnColor1, turnPointTransparency)
+plot(showTurnHalo ? turnValue1 : na, title="JMA 1 Virada Halo", style=plot.style_circles, color=turnHaloColor1, linewidth=turnHaloWidth, offset=hOffset1 - 1, display=display.pane, editable=false)
+plot(showTurnPoint ? turnValue1 : na, title="JMA 1 Virada Ponto", style=plot.style_circles, color=turnPointDrawColor1, linewidth=turnPointWidth, offset=hOffset1 - 1, display=display.pane, editable=false)
+
+var int turnSide2 = 0
+if directionReady and not na(raw2[2])
+    if useGradient
+        if strength2 > 0
+            turnSide2 := 1
+        else if strength2 < 0
+            turnSide2 := -1
+    else
+        turnSide2 := isUp2 ? 1 : -1
+turn2 = directionReady and nz(turnSide2[1]) != 0 and turnSide2 != turnSide2[1]
+turnValue2 = showTurns and show2 and turn2 ? value2[1] : na
+turnColor2 = highlightDirection ? (turnSide2 > 0 ? lineUp2 : lineDn2) : neutralColor2
+turnHaloColor2 = color.new(turnHaloFixed ? turnHaloColor : turnColor2, turnTransparency)
+turnPointDrawColor2 = color.new(turnPointFixed ? turnPointColor : turnColor2, turnPointTransparency)
+plot(showTurnHalo ? turnValue2 : na, title="JMA 2 Virada Halo", style=plot.style_circles, color=turnHaloColor2, linewidth=turnHaloWidth, offset=hOffset2 - 1, display=display.pane, editable=false)
+plot(showTurnPoint ? turnValue2 : na, title="JMA 2 Virada Ponto", style=plot.style_circles, color=turnPointDrawColor2, linewidth=turnPointWidth, offset=hOffset2 - 1, display=display.pane, editable=false)
+
+var int turnSide3 = 0
+if directionReady and not na(raw3[2])
+    if useGradient
+        if strength3 > 0
+            turnSide3 := 1
+        else if strength3 < 0
+            turnSide3 := -1
+    else
+        turnSide3 := isUp3 ? 1 : -1
+turn3 = directionReady and nz(turnSide3[1]) != 0 and turnSide3 != turnSide3[1]
+turnValue3 = showTurns and show3 and turn3 ? value3[1] : na
+turnColor3 = highlightDirection ? (turnSide3 > 0 ? lineUp3 : lineDn3) : neutralColor3
+turnHaloColor3 = color.new(turnHaloFixed ? turnHaloColor : turnColor3, turnTransparency)
+turnPointDrawColor3 = color.new(turnPointFixed ? turnPointColor : turnColor3, turnPointTransparency)
+plot(showTurnHalo ? turnValue3 : na, title="JMA 3 Virada Halo", style=plot.style_circles, color=turnHaloColor3, linewidth=turnHaloWidth, offset=hOffset3 - 1, display=display.pane, editable=false)
+plot(showTurnPoint ? turnValue3 : na, title="JMA 3 Virada Ponto", style=plot.style_circles, color=turnPointDrawColor3, linewidth=turnPointWidth, offset=hOffset3 - 1, display=display.pane, editable=false)
+
+var int turnSide4 = 0
+if directionReady and not na(raw4[2])
+    if useGradient
+        if strength4 > 0
+            turnSide4 := 1
+        else if strength4 < 0
+            turnSide4 := -1
+    else
+        turnSide4 := isUp4 ? 1 : -1
+turn4 = directionReady and nz(turnSide4[1]) != 0 and turnSide4 != turnSide4[1]
+turnValue4 = showTurns and show4 and turn4 ? value4[1] : na
+turnColor4 = highlightDirection ? (turnSide4 > 0 ? lineUp4 : lineDn4) : neutralColor4
+turnHaloColor4 = color.new(turnHaloFixed ? turnHaloColor : turnColor4, turnTransparency)
+turnPointDrawColor4 = color.new(turnPointFixed ? turnPointColor : turnColor4, turnPointTransparency)
+plot(showTurnHalo ? turnValue4 : na, title="JMA 4 Virada Halo", style=plot.style_circles, color=turnHaloColor4, linewidth=turnHaloWidth, offset=hOffset4 - 1, display=display.pane, editable=false)
+plot(showTurnPoint ? turnValue4 : na, title="JMA 4 Virada Ponto", style=plot.style_circles, color=turnPointDrawColor4, linewidth=turnPointWidth, offset=hOffset4 - 1, display=display.pane, editable=false)

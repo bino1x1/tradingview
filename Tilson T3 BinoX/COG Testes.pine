@@ -1,0 +1,312 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © veryfid
+// Adaptacao visual por BinoX.
+
+//@version=6
+// Comparacao de sinais. Nao simula funding nem margem cruzada de corretoras.
+// Quantidade, custos e capital podem ser alterados nas Propriedades.
+strategy("Cog By BinoX V1 - Testes", overlay=false, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.15, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, margin_long=100, margin_short=100)
+
+theme = input.string("CUSTOM", "Theme:", options=["CUSTOM", "CLEAN", "FIBONACCI", "FIBONACCI 2"])
+src =input.source(close, "Fonte")
+length =input.int(9, "Periodo COG", minval=2, maxval=500)
+smooth = input.string("NONE", "Use Smoothing?", options=["RMA", "NONE"])
+length5 =input.int(2,"Smoothing Length", minval=1, maxval=200)
+length2 =input.int(20,"Previous Hig/Low Length", minval=1)
+length3 =input.int(200,"LSMA Length", minval=2)
+length4 =input.int(1000,"fib Length", minval=2)
+col1 = input.color(color.white, "Fib Color")
+fib = input.bool(false, "Show Fibonacci Levels?")
+pline = input.bool(true, "Show Price Line?")
+showcol = input.bool(false, "Dual colored trigger?")
+showhl = input.bool(false,"Show High/Low Levels")
+
+if theme == "FIBONACCI 2"
+    showcol := true
+
+windowsize = input.int(title="Trigger Window Size", defval=3, minval=1)
+offset = input.float(title="Trigger Offset", defval=0.85, minval=0.0, maxval=1.0)
+sigma = input.float(title="Trigger Sigma", defval=6, minval=0.1)
+
+// Recursos opcionais da primeira bateria de pesquisa. Nenhum preset implica
+// desempenho futuro. Os filtros usam o preco, nunca a escala do oscilador.
+enableResearch = input.bool(true, "Ativar recursos de teste", group="Recursos de teste")
+researchPreset = input.string("Personalizado", "Configuracao", options=["Personalizado", "Base COG 9 / ALMA 3", "COG 9 / ALMA 5", "COG 9 / ALMA 3 + confirmacao"], group="Recursos de teste", active=enableResearch, tooltip="Presets usam fonte selecionada, COG 9 sem RMA, ALMA offset 0.85 e sigma 6. Personalizado usa os parametros originais, incluindo tema e suavizacao.")
+confirmationBars = input.int(0, "Velas adicionais de confirmacao", minval=0, maxval=5, group="Recursos de teste", active=enableResearch and researchPreset == "Personalizado", tooltip="0 = sinal no cruzamento; 1 = exige mais um fechamento do mesmo lado. Afeta entradas; saidas pelo cruzamento oposto permanecem imediatas.")
+confirmTestSignals = input.bool(true, "Confirmar sinais no fechamento", group="Recursos de teste", active=enableResearch)
+showTestSignals = input.bool(true, "Mostrar entradas de teste", group="Recursos de teste", active=enableResearch)
+showTestTrigger = input.bool(true, "Mostrar gatilho usado no teste", group="Recursos de teste", active=enableResearch, tooltip="Mostra o ALMA efetivo mesmo nos temas CLEAN e FIBONACCI 2.")
+useTrendFilter = input.bool(false, "Ativar filtro de tendencia", group="Filtro de teste", active=enableResearch)
+trendFilter = input.string("KAMA", "Media de filtro", options=["KAMA", "DSMA", "JMA", "T3", "EMA"], group="Filtro de teste", active=enableResearch and useTrendFilter)
+filterRule = input.string("Preco e inclinacao", "Condicao do filtro", options=["Preco e inclinacao", "Inclinacao", "Preco"], group="Filtro de teste", active=enableResearch and useTrendFilter)
+exitOnFilterLoss = input.bool(false, "Sair quando perder o filtro", group="Filtro de teste", active=enableResearch and useTrendFilter)
+kamaER = input.int(10, "KAMA: periodo ER", minval=2, maxval=200, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "KAMA")
+kamaFast = input.int(2, "KAMA: periodo rapido", minval=1, maxval=200, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "KAMA")
+kamaSlow = input.int(30, "KAMA: periodo lento", minval=2, maxval=500, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "KAMA")
+dsmaLength = input.int(40, "DSMA: periodo", minval=4, maxval=500, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "DSMA")
+jmaLength = input.int(14, "JMA: periodo", minval=1, maxval=500, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "JMA")
+jmaPhase = input.float(0, "JMA: fase", minval=-100, maxval=100, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "JMA")
+jmaPower = input.float(2, "JMA: power", minval=1, maxval=5, step=0.1, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "JMA")
+t3Length = input.int(14, "T3: periodo", minval=1, maxval=500, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "T3")
+t3Factor = input.float(0.7, "T3: vFactor", minval=0, maxval=2, step=0.05, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "T3")
+emaLength = input.int(200, "EMA: periodo", minval=1, maxval=500, group="Filtro de teste", active=enableResearch and useTrendFilter and trendFilter == "EMA")
+
+fixedPreset = enableResearch and researchPreset != "Personalizado"
+effectiveLength = fixedPreset ? 9 : length
+effectiveTriggerLength = fixedPreset ? (researchPreset == "COG 9 / ALMA 5" ? 5 : 3) : windowsize
+effectiveOffset = fixedPreset ? 0.85 : offset
+effectiveSigma = fixedPreset ? 6.0 : sigma
+effectiveConfirmation = fixedPreset ? (researchPreset == "COG 9 / ALMA 3 + confirmacao" ? 1 : 0) : confirmationBars
+
+COG1 = ta.cog(src, effectiveLength)
+COG= COG1
+cogRma = ta.rma(COG1,length5)
+
+if smooth == "RMA" and not fixedPreset
+    COG := cogRma
+if theme == "FIBONACCI"
+    fib := true
+    length4 := 50
+if theme == "FIBONACCI 2"
+    fib := true
+    length4 := 30
+if theme == "CLEAN" and not fixedPreset
+    COG := cogRma
+    // RMA calculada com Smoothing Length, como no original.
+    
+
+// Linha principal: cores, sombra e degrade curto como Tilson/JMA.
+gradientLevel = input.int(1, "Prolongamento do degrade (0 a 5)", minval=0, maxval=5, group="Linha principal", tooltip="0 = cores solidas por direcao. 1 = transicao curta; 5 = mais prolongada.")
+lineUp = input.color(#00ffaa, "Alta", group="Linha principal")
+lineDn = input.color(#FF0000, "Baixa", group="Linha principal")
+mainWidth = input.int(2, "Line", minval=1, maxval=10, group="Linha principal")
+showShadow = input.bool(true, "Mostrar sombra", group="Linha principal")
+shadowWidth = input.int(10, "Shadow", minval=1, maxval=30, group="Linha principal")
+shadowUp = input.color(color.new(#00ffaa,70), "Sombra alta", group="Linha principal")
+shadowDn = input.color(color.new(#FF0000,70), "Sombra baixa", group="Linha principal")
+confirmDirection = input.bool(true, "Confirmar direcao no fechamento", group="Linha principal")
+showTurns = input.bool(true, "Mostrar ponto com halo nas viradas", group="Viradas")
+showTurnPoint = input.bool(true, "Mostrar ponto", group="Viradas")
+showTurnHalo = input.bool(true, "Mostrar halo", group="Viradas")
+turnPointWidth = input.int(2, "Tamanho do ponto", minval=1, maxval=30, step=1, group="Viradas", tooltip="Aceita 1, 5, 10 etc. Escala relativa de circulos do TradingView; nao e diametro exato em pixels.")
+turnHaloWidth = input.int(5, "Tamanho do halo", minval=1, maxval=50, step=1, group="Viradas", tooltip="Use um valor maior que o ponto para ver o halo ao redor. Escala relativa, nao pixels exatos.")
+turnPointTransparency = input.int(0, "Transparencia do ponto", minval=0, maxval=100, group="Viradas", tooltip="0 = opaco; 100 = invisivel. Substitui a transparencia da cor selecionada e da linha.")
+turnTransparency = input.int(50, "Transparencia do halo", minval=0, maxval=100, group="Viradas", tooltip="0 = opaco; 100 = invisivel. Independente do ponto e da linha; a linha continua visivel por baixo.")
+turnPointFixed = input.bool(false, "Sobrescrever cor do ponto", group="Viradas", inline="pointColor")
+turnPointColor = input.color(color.white, "Cor fixa", group="Viradas", inline="pointColor", active=turnPointFixed)
+turnHaloFixed = input.bool(false, "Sobrescrever cor do halo", group="Viradas", inline="haloColor")
+turnHaloColor = input.color(color.aqua, "Cor fixa", group="Viradas", inline="haloColor", active=turnHaloFixed)
+// As cores fornecem o RGB; os controles numericos acima definem a transparencia.
+slope = nz(ta.change(COG))
+scale = ta.highest(math.abs(slope),100)
+strengthLive = scale > 0 ? slope / scale : 0.0
+directionReady = not confirmDirection or barstate.isconfirmed
+strength = directionReady ? strengthLive : nz(strengthLive[1])
+gradientRange = 0.06 * math.max(1,gradientLevel)
+var bool isUp = false
+if directionReady
+    if slope > 0
+        isUp := true
+    else if slope < 0
+        isUp := false
+lineColor = gradientLevel > 0 ? color.from_gradient(strength,-gradientRange,gradientRange,lineDn,lineUp) : (isUp ? lineUp : lineDn)
+shadowColor = gradientLevel > 0 ? color.from_gradient(strength,-gradientRange,gradientRange,shadowDn,shadowUp) : (isUp ? shadowUp : shadowDn)
+
+p1 = plot(theme == "FIBONACCI" or theme == "FIBONACCI 2" ? na : ta.lowest(COG,length2),color = color.new(color.green, 100), title = "Previous Low")
+p2 = plot(theme == "FIBONACCI" or theme == "FIBONACCI 2" ? na : ta.highest(COG,length2),color = color.new(color.red, 100), title = "Previous High")
+plot(pline and showShadow ? COG : na, color=shadowColor, linewidth=shadowWidth, title="COG Sombra", editable=false)
+c = plot(pline ? COG : na, color=lineColor, linewidth=mainWidth, title="COG Principal", trackprice=true, editable=false)
+trigger = ta.alma(COG, effectiveTriggerLength, effectiveOffset, effectiveSigma)
+lsma = ta.linreg(COG,length3,0)
+fill(p1,c,color=color.new(color.green,90),title = "Previous Low")
+fill(p2,c,color=color.new(color.red,80),title = "Previous High")
+plot(theme == "FIBONACCI" or theme == "FIBONACCI 2"? na : lsma,color=color.red,title = "LSMA")
+plot(enableResearch and showTestTrigger ? trigger : theme == "FIBONACCI 2" or theme == "CLEAN" ? na : trigger,title = "Trigger",color = showcol ? ta.change(COG) > 0 ?  color.green : color.red : color.blue)
+plot(theme == "CLEAN" ? ta.sma(COG,2) : na, color = color.white, linewidth = 2)
+
+h = ta.highest(COG,length4)
+l = ta.lowest(COG,length4)
+cogRange = h - l
+
+l1 = h - cogRange * 0.236 
+l2 = h - cogRange * 0.382  
+l3 = h - cogRange * 0.618
+l4 = h - cogRange * 0.764
+l5 = h - cogRange * 0.5
+
+f1 = plot(fib ? l1 : na, color = color.new(col1, 60), title = "0.236")
+f2 = plot(fib ? l2 : na, color = color.new(col1, 60), title = "0.382")
+f3 = plot(fib ? l3 : na, color = color.new(col1, 60), title = "0.618")
+f4 = plot(fib ? l4 : na, color = color.new(col1, 60), title = "0.764")
+f5 = plot(fib ? l5 : na, color = color.new(theme == "FIBONACCI 2" ? #ffe0b2 : col1, theme == "FIBONACCI 2" ? 20 : 60), title = "0.5")
+
+p3 = plot(showhl or theme == "FIBONACCI" ? h : na, "high")
+p4 = plot(showhl or theme == "FIBONACCI" ? l : na, "Low")
+p5 = plot(theme == "FIBONACCI 2" ? h : na, "high", color = color.red)
+p6 = plot(theme == "FIBONACCI 2" ? l : na, "Low", color = color.green)
+//Conditions
+enter = ta.crossover(COG1,trigger)
+
+fill(p5,f1,color.new(color.red,90)) 
+fill(p5,f2,color.new(color.red,90)) 
+fill(p6,f4,color.new(color.green,90)) 
+fill(p6,f3,color.new(color.green,90)) 
+
+
+// Pontos fixos: uma marca por troca de lado, com zona neutra contra ruido.
+var int turnSide = 0
+if directionReady and not na(COG[2])
+    if gradientLevel > 0
+        if strength > gradientRange * 0.1
+            turnSide := 1
+        else if strength < -gradientRange * 0.1
+            turnSide := -1
+    else
+        turnSide := isUp ? 1 : -1
+turn = directionReady and nz(turnSide[1]) != 0 and turnSide != turnSide[1]
+turnValue = pline and showTurns and turn ? COG : na
+turnColor = turnSide > 0 ? lineUp : lineDn
+haloColor = color.new(turnHaloFixed ? turnHaloColor : turnColor, turnTransparency)
+pointColor = color.new(turnPointFixed ? turnPointColor : turnColor, turnPointTransparency)
+plot(showTurnHalo ? turnValue : na,title="COG Virada Halo",style=plot.style_circles,color=haloColor,linewidth=turnHaloWidth,display=display.pane,editable=false)
+plot(showTurnPoint ? turnValue : na,title="COG Virada Ponto",style=plot.style_circles,color=pointColor,linewidth=turnPointWidth,display=display.pane,editable=false)
+
+// FILTROS DE PESQUISA — calculados em todas as barras, inclusive desativados.
+// KAMA: coeficiente ao quadrado a partir do Efficiency Ratio de Kaufman.
+researchKama(float source, int erLen, int fastLen, int slowLen) =>
+    movement = math.abs(source - source[erLen])
+    noise = ta.sma(math.abs(ta.change(source)), erLen) * erLen
+    er = not na(noise) and noise > 0 ? math.min(1.0, movement / noise) : 0.0
+    fast = 2.0 / (math.min(fastLen, slowLen) + 1.0)
+    slow = 2.0 / (math.max(fastLen, slowLen) + 1.0)
+    alpha = math.pow(slow + er * (fast - slow), 2)
+    seed = ta.sma(source, erLen)
+    var float value = na
+    value := na(value[1]) ? seed : value[1] + alpha * (source - value[1])
+    value
+
+// Ehlers DSMA, TASC julho/2018. Alpha limitado a [0,1] nesta variante
+// para impedir extrapolacao em periodos curtos/choques. Seed no preco.
+researchDsma(float source, int len) =>
+    a = math.exp(-math.sqrt(2.0) * math.pi / (0.5 * len))
+    b = 2.0 * a * math.cos(math.sqrt(2.0) * math.pi / (0.5 * len))
+    c = 1.0 - b + a * a
+    zeros = nz(source - source[2])
+    var float filtered = 0.0
+    filtered := c * (zeros + nz(zeros[1])) / 2.0 + b * nz(filtered[1]) - a * a * nz(filtered[2])
+    rms = math.sqrt(ta.sma(filtered * filtered, len))
+    alpha = not na(rms) and rms > 0 ? math.min(1.0, math.abs(filtered / rms) * 5.0 / len) : 0.0
+    var float value = na
+    value := na(value[1]) ? source : alpha * source + (1.0 - alpha) * value[1]
+    bar_index >= len ? value : na
+
+// JMA surrogate: mesmo nucleo publico usado em JMA BinoX V3.
+// Alex Orekhov (everget), copyright 2018-present, distribuicao MIT.
+// https://www.tradingview.com/script/nZuBWW9j-Jurik-Moving-Average/
+researchJma(float source, int len, float phase, float power) =>
+    beta = 0.45 * (len - 1) / (0.45 * (len - 1) + 2.0)
+    alpha = math.pow(beta, power)
+    var float e0 = 0.0
+    var float e1 = 0.0
+    var float e2 = 0.0
+    var float value = 0.0
+    e0 := (1.0 - alpha) * source + alpha * nz(e0[1])
+    e1 := (1.0 - beta) * (source - e0) + beta * nz(e1[1])
+    e2 := math.pow(1.0 - alpha, 2) * (e0 + (phase / 100.0 + 1.5) * e1 - nz(value[1])) + math.pow(alpha, 2) * nz(e2[1])
+    value := e2 + nz(value[1])
+    value
+
+researchT3(float source, int len, float vf) =>
+    e1 = ta.ema(source, len)
+    e2 = ta.ema(e1, len)
+    e3 = ta.ema(e2, len)
+    e4 = ta.ema(e3, len)
+    e5 = ta.ema(e4, len)
+    e6 = ta.ema(e5, len)
+    v2 = vf * vf
+    v3 = v2 * vf
+    -v3 * e6 + (3 * v2 + 3 * v3) * e5 + (-6 * v2 - 3 * vf - 3 * v3) * e4 + (1 + 3 * vf + v3 + 3 * v2) * e3
+
+kamaValue = researchKama(close, kamaER, kamaFast, kamaSlow)
+dsmaValue = researchDsma(close, dsmaLength)
+jmaValue = researchJma(close, jmaLength, jmaPhase, jmaPower)
+t3Value = researchT3(close, t3Length, t3Factor)
+emaValue = ta.ema(close, emaLength)
+filterValue = switch trendFilter
+    "KAMA" => kamaValue
+    "DSMA" => dsmaValue
+    "JMA" => jmaValue
+    "T3" => t3Value
+    => emaValue
+
+filterReady = not na(filterValue) and not na(filterValue[1])
+filterBull = filterReady and (filterRule == "Inclinacao" or close > filterValue) and (filterRule == "Preco" or filterValue > filterValue[1])
+filterBear = filterReady and (filterRule == "Inclinacao" or close < filterValue) and (filterRule == "Preco" or filterValue < filterValue[1])
+bullAllowed = not useTrendFilter or filterBull
+bearAllowed = not useTrendFilter or filterBear
+
+// Confirmacao exige fechamentos consecutivos do lado novo. Cruzamentos e
+// contadores sao avaliados sempre, sem chamadas historicas em condicoes lazy.
+researchCrossUp = ta.crossover(COG, trigger)
+researchCrossDn = ta.crossunder(COG, trigger)
+barsAfterUp = ta.barssince(researchCrossUp)
+barsAfterDn = ta.barssince(researchCrossDn)
+var int aboveCount = 0
+var int belowCount = 0
+aboveCount := COG > trigger ? nz(aboveCount[1]) + 1 : 0
+belowCount := COG < trigger ? nz(belowCount[1]) + 1 : 0
+researchReady = enableResearch and (not confirmTestSignals or barstate.isconfirmed)
+researchLong = researchReady and barsAfterUp == effectiveConfirmation and aboveCount >= effectiveConfirmation + 1 and bullAllowed
+researchShort = researchReady and barsAfterDn == effectiveConfirmation and belowCount >= effectiveConfirmation + 1 and bearAllowed
+researchExitLong = researchReady and (researchCrossDn or (useTrendFilter and exitOnFilterLoss and filterReady and not filterBull))
+researchExitShort = researchReady and (researchCrossUp or (useTrendFilter and exitOnFilterLoss and filterReady and not filterBear))
+
+// Entradas ficam na barra de deteccao, sem offset retroativo. Os pontos de
+// virada sao apenas desenhos e nao fazem parte das regras executaveis.
+plotshape(showTestSignals and researchLong, title="COG Entrada Long", style=shape.triangleup, location=location.bottom, color=color.lime, size=size.tiny)
+plotshape(showTestSignals and researchShort, title="COG Entrada Short", style=shape.triangledown, location=location.top, color=color.red, size=size.tiny)
+plot(enableResearch and useTrendFilter ? filterValue : na, title="Filtro de teste (preco)", display=display.data_window)
+plot(enableResearch ? effectiveConfirmation : na, title="Confirmacao adicional (velas)", display=display.data_window)
+plot(enableResearch ? (bullAllowed ? 1 : 0) : na, title="Filtro permite Long (1=sim)", display=display.data_window)
+plot(enableResearch ? (bearAllowed ? 1 : 0) : na, title="Filtro permite Short (1=sim)", display=display.data_window)
+
+// EXECUCAO — sinal no fechamento e ordem a mercado na abertura seguinte.
+tradeSide = input.string("Long", "Operacoes", options=["Long", "Short", "Long e Short"], group="Simulacao")
+testStart = input.time(timestamp("01 Jan 2023 00:00 +0000"), "Inicio", group="Simulacao")
+testEnd = input.time(timestamp("01 Jan 2026 00:00 +0000"), "Fim (exclusivo)", group="Simulacao", tooltip="A ordem de encerramento e enviada no primeiro fechamento fora do intervalo e executada na abertura seguinte.")
+warmupBars = input.int(300, "Barras minimas de aquecimento", minval=50, maxval=5000, group="Simulacao")
+useAtrStop = input.bool(false, "Ativar stop fixo por ATR", group="Simulacao")
+stopAtrLength = input.int(14, "ATR do stop", minval=1, maxval=200, group="Simulacao", active=useAtrStop)
+stopAtrMultiple = input.float(2.0, "Distancia do stop (ATR)", minval=0.1, maxval=20, step=0.1, group="Simulacao", active=useAtrStop, tooltip="Distancia congelada com o ATR da barra do sinal e aplicada a partir do preco de entrada. Nao e trailing stop. Para maior precisao intrabar, use Bar Magnifier.")
+stopAtr = ta.atr(stopAtrLength)
+var int longStopTicks = na
+var int shortStopTicks = na
+inTest = time >= testStart and time < testEnd and bar_index >= warmupBars
+wantLong = inTest and researchLong and tradeSide != "Short"
+wantShort = inTest and researchShort and tradeSide != "Long"
+
+if testEnd <= testStart
+    runtime.error("O fim do teste deve ser posterior ao inicio.")
+
+if not inTest or not enableResearch
+    strategy.cancel_all()
+    strategy.close_all(comment="Fora do teste")
+else
+    // Uma ordem de reversao ja encerra o lado anterior: nao duplicar close.
+    if wantLong and strategy.position_size <= 0
+        strategy.cancel("Stop Short")
+        longStopTicks := int(math.max(1, math.round(stopAtr * stopAtrMultiple / syminfo.mintick)))
+        strategy.entry("Long", strategy.long)
+        if useAtrStop
+            strategy.exit("Stop Long", "Long", loss=longStopTicks)
+    else if wantShort and strategy.position_size >= 0
+        strategy.cancel("Stop Long")
+        shortStopTicks := int(math.max(1, math.round(stopAtr * stopAtrMultiple / syminfo.mintick)))
+        strategy.entry("Short", strategy.short)
+        if useAtrStop
+            strategy.exit("Stop Short", "Short", loss=shortStopTicks)
+    else
+        if strategy.position_size > 0 and researchExitLong
+            strategy.close("Long", comment="Saida Long")
+        if strategy.position_size < 0 and researchExitShort
+            strategy.close("Short", comment="Saida Short")
